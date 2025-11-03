@@ -13,7 +13,7 @@ from routes import (
     # chatbot_route as chatbot_routes,
     portfolio_route as portfolio_routes,
     # simulation_route as simulation_routes,
-    # stock_routes,
+    stock_routes,
 )
 
 # Initialize FastAPI
@@ -42,7 +42,7 @@ app.add_middleware(
 
 # --- Include Routers ---
 # app.include_router(prediction_routes.router, prefix="/prediction", tags=["Prediction"])
-# app.include_router(stock_routes.router, prefix="/api", tags=["Stocks & Portfolio"])
+app.include_router(stock_routes.router, prefix="/api", tags=["Stocks & Portfolio"])
 # app.include_router(sentiment_routes.router, prefix="/sentiment", tags=["Sentiment"])
 # app.include_router(chatbot_routes.router, prefix="/chatbot", tags=["Chatbot"])
 app.include_router(portfolio_routes.router, prefix="/portfolio", tags=["Portfolio"])
