@@ -1,84 +1,26 @@
-from fastapi import APIRouter, HTTPException, Depends
-from typing import List, Optional
+from fastapi import APIRouter
 from pydantic import BaseModel
-from datetime import datetime
-from service.portfolio_service import portfolio, StockHolding, Portfolio
+from backend.service.portfolio_service import (
+    get_portfolio_holdings_service,
+    add_stock_service,
+    get_portfolio_value_service
+)
 
-router = APIRouter()
+router = APIRouter(prefix="/portfolio", tags=["Portfolio"])
 
-class StockOrder(BaseModel):
-    symbol: str
-    quantity: float
+class PortfolioAction(BaseModel):
+    ticker: str
+    shares: float
     price: float
 
-class PortfolioResponse(BaseModel):
-    total_value: float
-    cash_balance: float
-    invested_value: float
-    total_pnl: float
-    pnl_percent: float
-    initial_balance: float
-    holdings: List[dict]
-    transactions: List[dict]
-
-@router.get("/portfolio", response_model=PortfolioResponse)
-async def get_portfolio():
-    """Get portfolio summary, holdings, and transactions."""
-    performance = portfolio.get_portfolio_performance()
-    holdings = portfolio.get_holdings()
-    transactions = portfolio.get_transaction_history()
-    
-    return {
-        **performance,
-        'holdings': holdings,
-        'transactions': transactions
-    }
-
-@router.post("/portfolio/buy")
-async def buy_stock(order: StockOrder):
-    """Buy a stock."""
-    success = portfolio.add_stock(
-        symbol=order.symbol,
-        quantity=order.quantity,
-        price=order.price
-    )
-    
-    if not success:
-        raise HTTPException(status_code=400, detail="Insufficient funds")
-    
-    return {"message": f"Successfully bought {order.quantity} shares of {order.symbol} at ${order.price}"}
-
-@router.post("/portfolio/sell")
-async def sell_stock(order: StockOrder):
-    """Sell a stock."""
-    success = portfolio.remove_stock(
-        symbol=order.symbol,
-        quantity=order.quantity
-    )
-    
-    if not success:
-        raise HTTPException(status_code=404, detail=f"No position found for {order.symbol}")
-    
-    return {"message": f"Successfully sold {order.quantity} shares of {order.symbol}"}
-
-@router.get("/portfolio/holdings", response_model=List[dict])
+@router.get("/holdings")
 async def get_holdings():
-    """Get all holdings in the portfolio."""
-    return portfolio.get_holdings()
+    return await get_portfolio_holdings_service()
 
-@router.get("/portfolio/transactions", response_model=List[dict])
-async def get_transactions():
-    """Get transaction history."""
-    return portfolio.get_transaction_history()
+@router.post("/add")
+async def add_stock(action: PortfolioAction):
+    return await add_stock_service(action.ticker, action.shares, action.price)
 
-@router.get("/portfolio/performance", response_model=dict)
-async def get_performance():
-    """Get portfolio performance metrics."""
-    return portfolio.get_portfolio_performance()
-
-@router.post("/portfolio/reset")
-async def reset_portfolio(initial_balance: float = 100000.0):
-    """Reset the portfolio with a new initial balance."""
-    global portfolio
-    portfolio = Portfolio(initial_balance=initial_balance)
-    return {"message": f"Portfolio reset with initial balance: ${initial_balance:,.2f}"}
+@router.get("/value")
+async def get_portfolio_value():
+    return await get_portfolio_value_service()

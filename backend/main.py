@@ -3,17 +3,13 @@ from fastapi.middleware.cors import CORSMiddleware
 import os
 from dotenv import load_dotenv
 
-# Load environment variables from .env file
+# Load environment variables
 load_dotenv()
 
-# Import all routers
-from routes import (
-    # prediction_route as prediction_routes,
-    # sentiment_route as sentiment_routes,
-    # chatbot_route as chatbot_routes,
-    portfolio_route as portfolio_routes,
-    # simulation_route as simulation_routes,
-    stock_routes,
+# Import Routers
+from backend.routes import (
+    portfolio_route,
+    stock_route,
 )
 
 # Initialize FastAPI
@@ -23,8 +19,9 @@ app = FastAPI(
     version="1.0.0"
 )
 
-# --- Middleware ---
-# Get frontend port from environment
+# -----------------------------------
+# CORS Middleware
+# -----------------------------------
 frontend_port = os.getenv("FRONTEND_PORT", "8501")
 frontend_url = f"http://localhost:{frontend_port}"
 
@@ -33,42 +30,37 @@ app.add_middleware(
     allow_origins=[
         frontend_url,
         "http://localhost:8501",  # Default Streamlit port
-        "*"  # Allow all for development (restrict in production)
+        "*"  # Allow all for development (tighten for production)
     ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# --- Include Routers ---
-# app.include_router(prediction_routes.router, prefix="/prediction", tags=["Prediction"])
-app.include_router(stock_routes.router, prefix="/api", tags=["Stocks & Portfolio"])
-# app.include_router(sentiment_routes.router, prefix="/sentiment", tags=["Sentiment"])
-# app.include_router(chatbot_routes.router, prefix="/chatbot", tags=["Chatbot"])
-app.include_router(portfolio_routes.router, prefix="/portfolio", tags=["Portfolio"])
-# app.include_router(simulation_routes.router, prefix="/simulation", tags=["Simulation"])
+# -----------------------------------
+# Include Routers (all under /api)
+# -----------------------------------
+app.include_router(stock_route.router, prefix="/api", tags=["Stocks"])
+app.include_router(portfolio_route.router, prefix="/api", tags=["Portfolio"])
 
-# --- Root Endpoint ---
+# -----------------------------------
+# Root & Health Endpoints
+# -----------------------------------
 @app.get("/")
 async def root():
     backend_port = os.getenv("BACKEND_PORT", "8001")
     return {
         "message": "🚀 AI Financial Assistant API is live!",
-        "modules": [
-            "/prediction",
-            "/sentiment",
-            "/chatbot",
-            "/portfolio",
-            "/simulation",
-            "/api/stock/*"
+        "routes": [
+            "/api/stocks/*",
+            "/api/portfolio/*"
         ],
         "environment": os.getenv("ENVIRONMENT", "development"),
-        "api_docs": "/docs",
-        "backend_port": backend_port,
+        "docs": f"http://localhost:{backend_port}/docs",
         "frontend_url": frontend_url
     }
 
-# Health check endpoint
+
 @app.get("/health")
 async def health_check():
     return {
@@ -77,12 +69,14 @@ async def health_check():
         "polygon_api_configured": bool(os.getenv("POLYGON_API_KEY"))
     }
 
-# Run with uvicorn programmatically for development
+
+# -----------------------------------
+# Run Backend
+# -----------------------------------
 if __name__ == "__main__":
     import uvicorn
-    # Get port from environment variable, default to 8001
     port = int(os.getenv("BACKEND_PORT", "8001"))
     print(f"🚀 Starting backend server on port {port}...")
-    print(f"📊 API Documentation: http://localhost:{port}/docs")
-    print(f"🔗 Frontend URL: {frontend_url}")
-    uvicorn.run("main:app", host="0.0.0.0", port=port, reload=True)
+    print(f"📊 API Docs: http://localhost:{port}/docs")
+    print(f"🔗 Frontend: {frontend_url}")
+    uvicorn.run("backend.main:app", host="0.0.0.0", port=port, reload=False)

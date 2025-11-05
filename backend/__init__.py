@@ -1,5 +1,7 @@
 """
 Backend package initialization
 """
-from .model import data_fetcher, sentiment_analysis, feature_engineering, training, prediction
-from . import utils
+from backend.routes import (
+    portfolio_route,
+    stock_route,
+)
