@@ -1,148 +1,132 @@
+import os
 import streamlit as st
 import requests
-import os
-from datetime import datetime
 import plotly.graph_objects as go
+from datetime import datetime
 from dotenv import load_dotenv
 
 # ----------------------------------
-# Environment & Config
+# Environment Setup
 # ----------------------------------
 env_path = os.path.join(os.path.dirname(__file__), "../../.env")
 load_dotenv(env_path)
 
-API_BASE_URL = os.getenv("API_BASE_URL", "http://localhost:8001")
+API_BASE_URL = "http://localhost:8001/api"
 
-st.set_page_config(page_title="📊 Portfolio Dashboard", page_icon="💼", layout="wide")
+st.set_page_config(page_title="💼 Portfolio Dashboard", page_icon="💹", layout="wide")
 st.title("💼 Portfolio Dashboard")
-st.caption("Track, manage, and predict your stocks — all in one place.")
+st.caption("Manage your holdings, track performance, and predict trends — all in one place.")
 
 # ----------------------------------
-# Backend Helper
+# Helper: API Call Wrapper
 # ----------------------------------
 def call_backend(endpoint: str, method="GET", data=None):
+    """Generic wrapper for backend requests with /api prefix."""
+    url = f"{API_BASE_URL}{endpoint}"  # ensures /api prefix
     try:
-        url = f"{API_BASE_URL}{endpoint}"
         if method == "GET":
-            res = requests.get(url, timeout=15)
+            res = requests.get(url, timeout=60)
         else:
-            res = requests.post(url, json=data, timeout=15)
+            res = requests.post(url, json=data, timeout=60)
         res.raise_for_status()
         return res.json()
     except Exception as e:
-        st.error(f"Backend error: {e}")
+        st.error(f"⚠️ Backend error: {e}")
         return None
 
+# ----------------------------------
+# Sidebar - Add Stock Form
+# ----------------------------------
+with st.sidebar:
+    st.header("➕ Add Stock to Portfolio")
+    with st.form("add_stock_form"):
+        ticker = st.text_input("Ticker Symbol", placeholder="AAPL, TSLA, NVDA").upper()
+        quantity = st.number_input("Quantity", min_value=0.0, step=1.0)
+        price = st.number_input("Buy Price ($)", min_value=0.0, step=0.1)
+        submitted = st.form_submit_button("Add Stock")
+        if submitted:
+            if ticker and quantity > 0 and price > 0:
+                with st.spinner(f"Adding {ticker}..."):
+                    res = call_backend("/portfolio/add", method="POST", data={"ticker": ticker, "shares": quantity, "price": price})
+                    if res:
+                        st.success(f"✅ {ticker} added successfully!")
+                        st.rerun()
+            else:
+                st.warning("Please fill all fields correctly.")
 
 # ----------------------------------
-# Sidebar: Add Stock
+# Portfolio Overview
 # ----------------------------------
-st.sidebar.header("➕ Add New Stock")
+st.markdown("## 📊 Portfolio Overview")
 
-symbol = st.sidebar.text_input("Ticker Symbol (e.g. AAPL)").upper()
-quantity = st.sidebar.number_input("Quantity", min_value=0.0, step=1.0)
-price = st.sidebar.number_input("Buy Price ($)", min_value=0.0, step=0.1)
+holdings_data = call_backend("/portfolio/holdings")
 
-if st.sidebar.button("Add to Portfolio"):
-    if symbol and quantity > 0 and price > 0:
-        res = call_backend(
-            "/api/portfolio/add",
-            method="POST",
-            data={"ticker": symbol, "shares": quantity, "price": price},
-        )
-        if res:
-            st.sidebar.success(f"✅ {symbol} added successfully!")
-            st.rerun()
-    else:
-        st.sidebar.warning("Please enter valid symbol, quantity, and price.")
-
-if st.sidebar.button("🔄 Refresh Data"):
-    st.rerun()
-
-
-# ----------------------------------
-# Portfolio Holdings
-# ----------------------------------
-st.subheader("📊 Current Holdings")
-
-holdings_data = call_backend("/api/portfolio/holdings")
-
-if holdings_data and holdings_data.get("holdings"):
+if not holdings_data or not holdings_data.get("holdings"):
+    st.info("No holdings yet. Add your first stock from the sidebar.")
+else:
     holdings = holdings_data["holdings"]
 
-    for idx, stock in enumerate(holdings):
+    # Optional: Portfolio Performance
+    perf = call_backend("/portfolio/value")
+    if perf:
+        total_value = perf.get("total_value", 0)
+        pnl_percent = perf.get("pnl_percent", 0)
+        st.metric("💰 Total Portfolio Value", f"${total_value:,.2f}", f"{pnl_percent:.2f}%")
+        st.markdown("---")
+
+    # Display holdings grid
+    for stock in holdings:
         pnl_color = "green" if stock["pnl"] >= 0 else "red"
 
-        with st.container():
-            st.markdown(f"""
-            <div style="background-color:white;border-radius:12px;padding:15px;margin:10px 0;
-                        box-shadow:0 2px 6px rgba(0,0,0,0.1)">
-                <div style="display:flex;justify-content:space-between;align-items:center">
-                    <div>
-                        <h4 style="margin:0">{stock['symbol']}</h4>
-                        <small>Qty: {stock['quantity']}</small><br>
-                        <small>Avg Price: ${stock['average_price']:.2f}</small>
-                    </div>
-                    <div style="text-align:right;color:{pnl_color}">
-                        <b>${stock['current_price']:.2f}</b><br>
-                        <small>{stock['pnl_percent']:.2f}%</small>
-                    </div>
-                </div>
-            </div>
-            """, unsafe_allow_html=True)
+        with st.container(border=True):
+            c1, c2, c3, c4 = st.columns([1.5, 1, 1, 1.5])
 
-            col1, col2 = st.columns([1, 1])
+            with c1:
+                st.subheader(stock["symbol"])
+                st.caption(f"Avg Price: ${stock['average_price']:.2f}")
+                st.caption(f"Quantity: {stock['quantity']:.0f}")
 
-            # ---------- Prediction ----------
-            with col1:
-                if st.button(f"🔮 Predict {stock['symbol']}", key=f"predict_{idx}"):
-                    with st.spinner(f"Predicting {stock['symbol']} trend..."):
-                        pred = call_backend(f"/api/stock/predict/{stock['symbol']}")
-                        if pred:
-                            fig = go.Figure()
-                            fig.add_trace(go.Scatter(
-                                x=pred["dates"],
-                                y=pred["predictions"],
-                                mode="lines+markers",
-                                name="Predicted"
-                            ))
-                            fig.add_hline(
-                                y=pred["current_price"],
-                                line_dash="dash",
-                                line_color="red",
-                                annotation_text=f"Current: ${pred['current_price']:.2f}"
-                            )
-                            fig.update_layout(
-                                title=f"{stock['symbol']} - 10-Day Forecast",
-                                template="plotly_white",
-                                xaxis_title="Date",
-                                yaxis_title="Price (USD)"
-                            )
-                            st.plotly_chart(fig, use_container_width=True)
+            with c2:
+                st.metric("Current Price", f"${stock['current_price']:.2f}")
 
-            # ---------- Sell Stock ----------
-            with col2:
-                sell_qty = st.number_input(
-                    f"Sell Qty ({stock['symbol']})",
-                    min_value=0.0,
-                    max_value=stock["quantity"],
-                    step=1.0,
-                    key=f"sell_qty_{idx}",
-                )
-                if st.button(f"💸 Sell {stock['symbol']}", key=f"sell_{idx}"):
-                    if sell_qty > 0:
-                        res = call_backend(
-                            "/api/portfolio/sell",
-                            method="POST",
-                            data={"symbol": stock["symbol"], "quantity": sell_qty},
-                        )
-                        if res:
-                            st.success(f"✅ Sold {sell_qty} {stock['symbol']}")
-                            st.rerun()
-                    else:
-                        st.warning("Enter a valid sell quantity.")
+            with c3:
+                st.metric("PnL %", f"{stock['pnl_percent']:.2f}%", delta_color="normal")
 
-            st.markdown("---")
+            with c4:
+                col_a, col_b = st.columns(2)
+                with col_a:
+                    if st.button(f"🔮 Predict", key=f"predict_{stock['symbol']}"):
+                        with st.spinner(f"Generating forecast for {stock['symbol']}..."):
+                            pred = call_backend(f"/stock/predict/{stock['symbol']}")
+                            if pred:
+                                fig = go.Figure()
+                                fig.add_trace(go.Scatter(
+                                    x=pred["dates"],
+                                    y=pred["predictions"],
+                                    mode="lines+markers",
+                                    name="Predicted"
+                                ))
+                                fig.add_hline(y=pred["current_price"], line_dash="dash", line_color="red",
+                                              annotation_text=f"Current: ${pred['current_price']:.2f}")
+                                fig.update_layout(
+                                    title=f"{stock['symbol']} - {len(pred['predictions'])}-Day Forecast",
+                                    template="plotly_white",
+                                    xaxis_title="Date",
+                                    yaxis_title="Price (USD)",
+                                    height=400
+                                )
+                                st.plotly_chart(fig, use_container_width=True)
 
-else:
-    st.info("No holdings found — add some stocks from the sidebar.")
+                with col_b:
+                    sell_qty = st.number_input(f"Sell Qty ({stock['symbol']})",
+                                               min_value=0.0, max_value=stock["quantity"], step=1.0,
+                                               key=f"sell_{stock['symbol']}")
+                    if st.button(f"💸 Sell", key=f"sell_btn_{stock['symbol']}"):
+                        if sell_qty > 0:
+                            res = call_backend("/portfolio/sell", method="POST",
+                                               data={"ticker": stock["symbol"], "shares": sell_qty, "price": stock["current_price"]})
+                            if res:
+                                st.success(f"✅ Sold {sell_qty} shares of {stock['symbol']}")
+                                st.experimental_rerun()
+                        else:
+                            st.warning("Enter a valid quantity to sell.")

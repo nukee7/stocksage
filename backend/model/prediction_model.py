@@ -3,20 +3,37 @@ import numpy as np
 import pandas as pd
 from datetime import datetime, timedelta
 from sklearn.preprocessing import StandardScaler, MinMaxScaler
-import xgboost as xgb
 from ta.momentum import RSIIndicator
 from ta.trend import MACD
 
 from backend.utils.data_utils import fetch_massive_data  # ✅ Unified Massive data fetcher
 
+# ✅ Restrict threading early (safe for macOS)
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["OPENBLAS_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
+os.environ["NUMEXPR_NUM_THREADS"] = "1"
+os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
-# -------------------------------------
-# 📊 Fetch historical data from Massive
-# -------------------------------------
+
+# ======================================================
+# 🧩 Helper: Lazy Importer
+# ======================================================
+def _lazy_imports():
+    """
+    Import heavy libraries (XGBoost, Keras) only when needed.
+    Prevents blocking during FastAPI startup.
+    """
+    import xgboost as xgb
+    from keras.models import Sequential
+    from keras.layers import LSTM, Dense
+    return xgb, Sequential, LSTM, Dense
+
+
+# ======================================================
+# 📊 Fetch Historical Data
+# ======================================================
 def get_stock_historical_data(ticker: str, days: int = 60) -> pd.DataFrame:
-    """
-    Fetch OHLCV historical data for given ticker via Massive API.
-    """
     ticker = ticker.upper()
     end_date = datetime.now()
     start_date = end_date - timedelta(days=days)
@@ -34,14 +51,7 @@ def get_stock_historical_data(ticker: str, days: int = 60) -> pd.DataFrame:
         df = pd.DataFrame(results)
         df["t"] = pd.to_datetime(df["t"], unit="ms")
         df.rename(
-            columns={
-                "t": "Date",
-                "o": "Open",
-                "h": "High",
-                "l": "Low",
-                "c": "Close",
-                "v": "Volume",
-            },
+            columns={"t": "Date", "o": "Open", "h": "High", "l": "Low", "c": "Close", "v": "Volume"},
             inplace=True,
         )
         return df
@@ -50,9 +60,9 @@ def get_stock_historical_data(ticker: str, days: int = 60) -> pd.DataFrame:
         return pd.DataFrame()
 
 
-# -------------------------------------
+# ======================================================
 # 📈 Feature Engineering
-# -------------------------------------
+# ======================================================
 def add_technical_indicators(df: pd.DataFrame) -> pd.DataFrame:
     df["SMA"] = df["Close"].rolling(window=10).mean()
     df["RSI"] = RSIIndicator(df["Close"]).rsi()
@@ -66,13 +76,10 @@ def create_lag_features(df: pd.DataFrame, lags=[1, 2, 3]) -> pd.DataFrame:
     return df
 
 
-# -------------------------------------
+# ======================================================
 # 🧠 Data Preparation
-# -------------------------------------
+# ======================================================
 def prepare_data(df: pd.DataFrame):
-    """
-    Clean and prepare the data for training or inference.
-    """
     df = add_technical_indicators(df)
     df = create_lag_features(df)
     df = df.dropna()
@@ -92,16 +99,12 @@ def prepare_data(df: pd.DataFrame):
     return X_scaled, y_scaled, df["Date"].values, scaler_X, scaler_y, df
 
 
-# -------------------------------------
-# 🏗️ Model Training
-# -------------------------------------
+# ======================================================
+# 🏗️ Model Training (Lazy Imports)
+# ======================================================
 def train_lstm(X, y):
-    """
-    Train an LSTM model (imports TensorFlow only when called).
-    """
-    # ✅ Lazy import (prevents TensorFlow from blocking at import time)
-    from keras.models import Sequential
-    from keras.layers import LSTM, Dense
+    """Train LSTM with on-demand TensorFlow import."""
+    _, Sequential, LSTM, Dense = _lazy_imports()
 
     X_lstm = np.reshape(X, (X.shape[0], 1, X.shape[1]))
     model = Sequential([
@@ -114,6 +117,8 @@ def train_lstm(X, y):
 
 
 def train_xgboost(X, y):
+    """Train XGBoost lazily and safely."""
+    xgb, _, _, _ = _lazy_imports()
     xgb_model = xgb.XGBRegressor(
         n_estimators=100,
         random_state=42,
@@ -124,13 +129,10 @@ def train_xgboost(X, y):
     return xgb_model
 
 
-# -------------------------------------
+# ======================================================
 # 🔮 Prediction Logic
-# -------------------------------------
+# ======================================================
 def predict_future(X, lstm_model, hybrid_model, scaler_y, dates, future_days=10):
-    """
-    Hybrid LSTM + XGBoost prediction for next N days.
-    """
     future_predictions = []
     last_known_X = X[-1]
 
@@ -156,21 +158,17 @@ def predict_future(X, lstm_model, hybrid_model, scaler_y, dates, future_days=10)
     return pd.DataFrame({"Date": future_dates, "Predicted Price": future_predictions})
 
 
-# -------------------------------------
-# 🔧 Full Pipeline Wrapper
-# -------------------------------------
+# ======================================================
+# 🔧 Full Pipeline
+# ======================================================
 def generate_stock_prediction(ticker: str, days: int = 10):
-    """
-    Complete hybrid prediction pipeline:
-    Fetch data → preprocess → train → predict → return DataFrame.
-    """
     df = get_stock_historical_data(ticker, days=90)
     if df.empty:
         raise ValueError(f"No historical data found for {ticker}")
 
     X_scaled, y_scaled, dates, _, scaler_y, _ = prepare_data(df)
 
-    # ✅ Train models only when needed
+    # Lazy model training
     lstm_model = train_lstm(X_scaled, y_scaled)
     xgb_model = train_xgboost(X_scaled, y_scaled)
 
@@ -184,5 +182,5 @@ def generate_stock_prediction(ticker: str, days: int = 10):
         "current_price": current_price,
         "predictions": predictions_df["Predicted Price"].round(2).tolist(),
         "dates": predictions_df["Date"].astype(str).tolist(),
-        "model": "Hybrid LSTM + XGBoost (trained on recent data)"
+        "model": "Hybrid LSTM + XGBoost (lazy on-demand)"
     }
