@@ -52,3 +52,5 @@ six==1.17.0
 loguru
 aiohttp
 httpx
+
+yfinance

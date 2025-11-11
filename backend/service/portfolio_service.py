@@ -10,7 +10,8 @@ portfolio = Portfolio()
 async def get_portfolio_holdings_service():
     """Return current portfolio holdings."""
     try:
-        return {"holdings": portfolio.get_holdings()}
+        # Already returns {"holdings": [...]}
+        return portfolio.get_holdings()
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching holdings: {str(e)}")
 
