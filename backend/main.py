@@ -1,18 +1,32 @@
+import os
+import subprocess
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-import os
 from dotenv import load_dotenv
 
+# -----------------------------------
 # Load environment variables
+# -----------------------------------
 load_dotenv()
 
-# Import Routers
+# --- Safe threading limits for macOS (must be set before imports using NumPy/SciPy) ---
+os.environ["OMP_NUM_THREADS"] = "1"
+os.environ["OPENBLAS_NUM_THREADS"] = "1"
+os.environ["MKL_NUM_THREADS"] = "1"
+os.environ["VECLIB_MAXIMUM_THREADS"] = "1"
+os.environ["NUMEXPR_NUM_THREADS"] = "1"
+
+# -----------------------------------
+# Import Routers (after limiting threads)
+# -----------------------------------
 from backend.routes import (
     portfolio_route,
-    stock_route,
+    prediction_route
 )
 
+# -----------------------------------
 # Initialize FastAPI
+# -----------------------------------
 app = FastAPI(
     title="AI Financial Assistant API",
     description="Backend for AI-powered financial analytics, portfolio management, and chatbot assistant.",
@@ -30,7 +44,7 @@ app.add_middleware(
     allow_origins=[
         frontend_url,
         "http://localhost:8501",  # Default Streamlit port
-        "*"  # Allow all for development (tighten for production)
+        "*"  # Allow all for development
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -40,9 +54,8 @@ app.add_middleware(
 # -----------------------------------
 # Include Routers (all under /api)
 # -----------------------------------
-app.include_router(stock_route.router, prefix="/api", tags=["Stocks"])
 app.include_router(portfolio_route.router, prefix="/api", tags=["Portfolio"])
-
+app.include_router(prediction_route.router, prefix="/api", tags=["Stocks"])
 # -----------------------------------
 # Root & Health Endpoints
 # -----------------------------------
@@ -60,7 +73,6 @@ async def root():
         "frontend_url": frontend_url
     }
 
-
 @app.get("/health")
 async def health_check():
     return {
@@ -69,14 +81,33 @@ async def health_check():
         "polygon_api_configured": bool(os.getenv("POLYGON_API_KEY"))
     }
 
-
 # -----------------------------------
-# Run Backend
+# Run Backend Safely (macOS Mutex Fix)
 # -----------------------------------
 if __name__ == "__main__":
-    import uvicorn
     port = int(os.getenv("BACKEND_PORT", "8001"))
-    print(f"🚀 Starting backend server on port {port}...")
+    frontend_url = os.getenv("FRONTEND_URL", "http://localhost:8501")
+    num_workers = 1  # ✅ Force single worker for macOS stability
+
+    print(f"\n🚀 Starting backend server on port {port}...")
     print(f"📊 API Docs: http://localhost:{port}/docs")
     print(f"🔗 Frontend: {frontend_url}")
-    uvicorn.run("backend.main:app", host="0.0.0.0", port=port, reload=False)
+    print(f"🧵 Workers: {num_workers}\n")
+
+    # ✅ Launch uvicorn in subprocess with enforced env vars
+    env = os.environ.copy()
+    env.update({
+        "OMP_NUM_THREADS": "1",
+        "OPENBLAS_NUM_THREADS": "1",
+        "MKL_NUM_THREADS": "1",
+        "VECLIB_MAXIMUM_THREADS": "1",
+        "NUMEXPR_NUM_THREADS": "1"
+    })
+
+    subprocess.run([
+        "uvicorn", "backend.main:app",
+        "--host", "0.0.0.0",
+        "--port", str(port),
+        "--workers", str(num_workers),
+        "--no-access-log"
+    ], env=env)

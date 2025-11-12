@@ -74,38 +74,97 @@ st.markdown("## 📊 Portfolio Overview")
 holdings_data = call_backend("/portfolio/holdings")
 perf = call_backend("/portfolio/value")
 
-if not holdings_data or not holdings_data.get("holdings"):
+# Debug: Print raw response
+if show_debug:
+    with st.expander("🔍 Raw API Response"):
+        st.write("Holdings endpoint response:")
+        st.json(holdings_data)
+        st.write("Value endpoint response:")
+        st.json(perf)
+
+if not holdings_data:
+    st.error("Unable to fetch portfolio data. Check if backend is running.")
+elif not isinstance(holdings_data, dict):
+    st.error(f"Unexpected data format from backend. Expected dict, got {type(holdings_data)}")
+    if show_debug:
+        st.json(holdings_data)
+elif "holdings" not in holdings_data:
+    st.error("Backend response missing 'holdings' key")
+    if show_debug:
+        st.json(holdings_data)
+elif not holdings_data["holdings"] or len(holdings_data["holdings"]) == 0:
     st.info("No holdings yet. Add your first stock from the sidebar.")
+    if perf and show_debug:
+        st.json({"performance": perf})
 else:
     holdings = holdings_data["holdings"]
+    
+    # Validate holdings is a list
+    if not isinstance(holdings, list):
+        st.error(f"Invalid holdings format. Expected list, got {type(holdings)}")
+        if show_debug:
+            st.json({"holdings_data": holdings_data, "holdings": holdings})
+    else:
+        # Debug: Check data structure
+        if show_debug:
+            st.write("DEBUG - Holdings count:", len(holdings))
+            st.write("DEBUG - First holding:", holdings[0] if holdings else "None")
 
-    # Portfolio Performance Metrics (Only Invested & PnL)
+    # Portfolio Performance Metrics
     if perf:
-        col1, col2 = st.columns(2)
-
+        col1, col2, col3, col4 = st.columns(4)
+        
         with col1:
-            invested_value = perf.get("invested_value", 0.0)
-            st.metric("💼 Invested Amount", f"${invested_value:,.2f}")
-
+            total_value = perf.get("total_value", 0)
+            st.metric("💰 Total Portfolio Value", f"${total_value:,.2f}")
+        
         with col2:
-            pnl = perf.get("total_pnl", 0.0)
-            pnl_percent = perf.get("pnl_percent", 0.0)
-            st.metric("📈 Total Profit/Loss", f"${pnl:,.2f}", f"{pnl_percent:.2f}%")
-
+            cash_balance = perf.get("cash_balance", 0)
+            st.metric("💵 Cash Balance", f"${cash_balance:,.2f}")
+        
+        with col3:
+            invested_value = perf.get("invested_value", 0)
+            st.metric("📈 Invested Value", f"${invested_value:,.2f}")
+        
+        with col4:
+            pnl = perf.get("total_pnl", 0)
+            pnl_percent = perf.get("pnl_percent", 0)
+            st.metric("💹 Total PnL", f"${pnl:,.2f}", f"{pnl_percent:.2f}%")
+        
         st.markdown("---")
-
-    # Debug Information (optional)
+    
+    # Debug Information
     if show_debug:
         with st.expander("🔍 Debug Information"):
             st.json({"holdings": holdings_data, "performance": perf})
+            
+            # Manual calculation check
+            total_market_value = sum(h["market_value"] for h in holdings)
+            st.write(f"Manual calc - Invested Value: ${total_market_value:,.2f}")
+            st.write(f"Backend - Invested Value: ${perf.get('invested_value', 0):,.2f}")
+            st.write(f"Difference: ${abs(total_market_value - perf.get('invested_value', 0)):,.2f}")
 
     # Display holdings grid
     st.markdown("### 📋 Your Holdings")
     
-    for stock in holdings:
+    for idx, stock in enumerate(holdings):
+        # Validate each stock is a dictionary
+        if not isinstance(stock, dict):
+            st.error(f"Invalid stock data at index {idx}: {type(stock)}")
+            continue
+            
+        # Validate required fields
+        required_fields = ["symbol", "quantity", "average_price", "current_price", "market_value", "pnl", "pnl_percent"]
+        missing_fields = [field for field in required_fields if field not in stock]
+        if missing_fields:
+            st.error(f"Stock data missing fields: {missing_fields}")
+            if show_debug:
+                st.json(stock)
+            continue
+                
         with st.container(border=True):
             c1, c2, c3, c4 = st.columns([1.5, 1, 1, 1.5])
-            
+
             with c1:
                 st.subheader(stock["symbol"])
                 st.caption(f"Avg Price: ${stock['average_price']:.2f}")
@@ -128,7 +187,8 @@ else:
                 with col_a:
                     if st.button(f"🔮 Predict", key=f"predict_{stock['symbol']}"):
                         with st.spinner(f"Generating forecast for {stock['symbol']}..."):
-                            pred = call_backend(f"/stock/predict/{stock['symbol']}")
+                            # Route is /api/predict/{symbol} - call_backend already adds /api
+                            pred = call_backend(f"/predict/{stock['symbol']}")
                             if pred:
                                 fig = go.Figure()
                                 fig.add_trace(go.Scatter(

@@ -220,25 +220,29 @@ class Portfolio:
         logger.info(f"Returning {len(holdings_list)} holdings")
         return {"holdings": holdings_list}
 
+     
     def get_portfolio_performance(self) -> dict:
-    """
-    Return summarized portfolio performance with only invested amount and PnL.
-    """
-    self.update_prices()
-    
-    invested_value = self.get_investments_value()
-    total_value = invested_value + self.cash_balance
-    pnl = total_value - self.initial_balance
-    pnl_percent = (pnl / self.initial_balance * 100) if self.initial_balance > 0 else 0.0
+        """
+        Return summarized portfolio performance with only invested amount and PnL.
+        """
+        self.update_prices()
 
-    performance = {
-        "invested_value": round(invested_value, 2),
-        "total_pnl": round(pnl, 2),
-        "pnl_percent": round(pnl_percent, 2)
-    }
+        invested_value = self.get_investments_value()
+        total_value = invested_value + self.cash_balance
+        pnl = total_value - self.initial_balance
+        pnl_percent = (pnl / self.initial_balance * 100) if self.initial_balance > 0 else 0.0
 
-    logger.info(f"Portfolio simplified performance: {performance}")
-    return performance
+        performance = {
+            "invested_value": round(invested_value, 2),
+            "total_value": round(total_value, 2),
+            "cash_balance": round(self.cash_balance, 2),
+            "total_pnl": round(pnl, 2),
+            "pnl_percent": round(pnl_percent, 2),
+            "holdings_count": len(self.holdings)
+        }
+
+        logger.info(f"Portfolio simplified performance: {performance}")
+        return performance
 
     def get_summary(self) -> str:
         """Get a text summary of the portfolio."""
