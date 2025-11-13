@@ -21,7 +21,9 @@ os.environ["NUMEXPR_NUM_THREADS"] = "1"
 # -----------------------------------
 from backend.routes import (
     portfolio_route,
-    prediction_route
+    prediction_route,
+    news_route,
+    chatbot_route
 )
 
 # -----------------------------------
@@ -56,6 +58,8 @@ app.add_middleware(
 # -----------------------------------
 app.include_router(portfolio_route.router, prefix="/api", tags=["Portfolio"])
 app.include_router(prediction_route.router, prefix="/api", tags=["Stocks"])
+app.include_router(news_route.router, prefix="/api", tags=["News"])
+app.include_router(chatbot_route.router, prefix="/api", tags=["Chatbot"])
 # -----------------------------------
 # Root & Health Endpoints
 # -----------------------------------
@@ -66,7 +70,10 @@ async def root():
         "message": "🚀 AI Financial Assistant API is live!",
         "routes": [
             "/api/stocks/*",
-            "/api/portfolio/*"
+            "/api/portfolio/*",
+            "/api/news/*",
+            "/api/predict/*"
+            "/api/chat/*"
         ],
         "environment": os.getenv("ENVIRONMENT", "development"),
         "docs": f"http://localhost:{backend_port}/docs",
@@ -108,6 +115,7 @@ if __name__ == "__main__":
         "uvicorn", "backend.main:app",
         "--host", "0.0.0.0",
         "--port", str(port),
+        "--reload",
         "--workers", str(num_workers),
         "--no-access-log"
     ], env=env)
