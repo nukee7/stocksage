@@ -1,16 +1,16 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from langchain_core.orchestrator import run_chatbot
+from backend.service.chatbot_service import run_chatbot
 
-router = APIRouter()
+router = APIRouter(prefix="/chatbot", tags=["Chatbot"])
 
 class ChatRequest(BaseModel):
-    query: str
+    message: str
 
-@router.post("/chatbot")
-async def chatbot_route(request: ChatRequest):
+@router.post("/query")
+async def chatbot_query(req: ChatRequest):
     try:
-        response = await run_chatbot(request.query)
+        response = await run_chatbot(req.message)
         return {"response": response}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Chatbot error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))

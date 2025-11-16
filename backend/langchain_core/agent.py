@@ -1,32 +1,14 @@
-from langchain.agents import initialize_agent
-from langchain_core.llm_config import load_llm
-from langchain_core.memory import get_memory
-from langchain_core.tools.portfolio_tools import (
-    PortfolioValueTool,
-    PortfolioHoldingsTool,
-    AddStockTool
-)
-from langchain_core.tools.stock_tools import StockPredictionTool
-from langchain_core.tools.news_tools import StockNewsTool
+# backend/langchain_core/agent.py
 
-def create_agent():
-    """Initialize LangChain agent with all tools and memory."""
-    llm = load_llm()
-    memory = get_memory()
+from langchain_core.messages import SystemMessage, HumanMessage
+from langchain_openai import ChatOpenAI
+from langchain_core.prompts import ChatPromptTemplate
 
-    tools = [
-        StockPredictionTool,
-        StockNewsTool,
-        PortfolioValueTool,
-        PortfolioHoldingsTool,
-        AddStockTool
-    ]
+def get_agent_response(prompt: str) -> str:
+    """Handles chat interaction with the LLM."""
+    system_message = SystemMessage(content="You are StockSage, an AI financial assistant.")
+    human_message = HumanMessage(content=prompt)
 
-    agent = initialize_agent(
-        tools=tools,
-        llm=llm,
-        agent_type="chat-conversational-react-description",
-        memory=memory,
-        verbose=True,
-    )
-    return agent
+    model = ChatOpenAI(model="gpt-4o-mini", temperature=0.7)
+    response = model.invoke([system_message, human_message])
+    return response.content

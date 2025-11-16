@@ -1,12 +1,12 @@
+# backend/langchain_core/tools/stock_tools.py
 import asyncio
-from langchain.agents import Tool
 from backend.service.prediction_service import get_stock_prediction_service
 
-async def _predict(symbol: str):
-    return await get_stock_prediction_service(symbol)
-
-StockPredictionTool = Tool(
-    name="StockPredictionTool",
-    func=lambda symbol: asyncio.run(_predict(symbol)),
-    description="Get AI-based stock price predictions for a given symbol (e.g., AAPL, TSLA)."
-)
+async def _predict(symbol):
+    if symbol is None:
+        return "No symbol provided."
+    # if the wrapper passed a dict, extract symbol
+    sym = symbol.get("symbol") if isinstance(symbol, dict) else str(symbol).strip()
+    if not sym:
+        return "No symbol provided."
+    return await get_stock_prediction_service(sym)

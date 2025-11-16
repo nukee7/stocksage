@@ -115,7 +115,6 @@ if __name__ == "__main__":
         "uvicorn", "backend.main:app",
         "--host", "0.0.0.0",
         "--port", str(port),
-        "--reload",
         "--workers", str(num_workers),
         "--no-access-log"
     ], env=env)
