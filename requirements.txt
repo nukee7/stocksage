@@ -26,7 +26,7 @@ typing_extensions==4.13.2
 # ML & Technical Analysis
 scikit-learn
 xgboost
-tensorflow
+tensorflow=2.15.0
 keras
 
 # NLP / Sentiment (FinBERT)
@@ -34,8 +34,6 @@ transformers
 torch
 sentencepiece
 
-# Polygon API Client
-polygon-api-client==1.14.0
 
 # LangChain / Agents
 langchain
